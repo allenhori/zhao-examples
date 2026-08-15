@@ -1,0 +1,60 @@
+name: zhao-lineage
+
+on:
+  pull_request:
+    paths:
+      - "dbt_projects/breaking-change-gate/**"
+      - ".github/workflows/zhao-lineage.yml"
+
+defaults:
+  run:
+    working-directory: dbt_projects/breaking-change-gate
+
+jobs:
+  lineage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt-core and dbt-duckdb
+        run: pip install dbt-core dbt-duckdb
+
+      - name: Install zhao-cli
+        run: curl -fsSL https://raw.githubusercontent.com/allenhori/zhao-cli/master/scripts/install.sh | sh
+
+      - name: dbt seed
+        run: dbt seed
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: dbt compile (target/manifest.json is all zhao lineage reads)
+        run: dbt compile
+        env:
+          DBT_PROFILES_DIR: .
+
+      # Plain text: a structural upstream/downstream query, no Baseline, no
+      # git, no diff -- answers "what's connected to this model right now?"
+      - name: Run zhao lineage (plain text, dim_customers)
+        run: PATH="$HOME/.zhao/bin:$PATH" zhao lineage dim_customers --text
+
+      # HTML is zhao lineage's actual default output mode (--text opts out
+      # of it, not the other way around). Regenerate the report and fail if
+      # it drifts from the copy committed in this repo, so the committed
+      # artifact can never silently go stale relative to the project it
+      # describes.
+      - name: Run zhao lineage (HTML) and check the committed report isn't stale
+        run: |
+          PATH="$HOME/.zhao/bin:$PATH" zhao lineage --html /tmp/lineage_regen.html dim_customers
+          diff lineage_report_dim_customers.html /tmp/lineage_regen.html
+
+      - name: Upload the regenerated report as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhao-lineage-dim-customers-report
+          path: dbt_projects/breaking-change-gate/lineage_report_dim_customers.html
