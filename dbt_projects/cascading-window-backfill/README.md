@@ -76,6 +76,35 @@ project, runs the exact `--anchor` command above, and uploads the JSON plan
 (`target/zhao/dbt_plan.json`) as a workflow artifact alongside the `--pretty` tree printed to the
 job log.
 
+## The plan's JSON output actually driving `dbt build` — not just an artifact
+
+`zhao-dbt-plan` never executes anything itself — it only computes and writes a plan. The
+[workflow](../../.github/workflows/cascading-window-backfill.yml)'s last step is what turns that
+plan into real runs: it reads `target/zhao/dbt_plan.json` with `jq`, walks its `models` array in
+`layer` order (upstream tier first), and for each model runs
+
+```bash
+dbt build --select <model> --event-time-start <that model's computed event_time_start> --event-time-end <that model's computed event_time_end>
+```
+
+— the plan's own computed window for each tier, literally, not a human reading the JSON and
+retyping the dates. Verified locally: all three tiers build successfully in the plan's own
+computed windows (`mb_events_daily` for `2026-01-02..01-12`, `mb_device_activity_3d` for
+`2026-01-04..01-12`, `mb_device_activity_7d_smoothed` for `2026-01-10..01-11`), each depending on
+the previous tier's output already being built with its own wider window.
+
+**A real thing this surfaced**: actually running `dbt build` (as opposed to only `dbt
+parse`/`dbt compile`, which this repo's examples had only ever done before) exposed a genuine
+misconfiguration in `mb_device_activity_3d` — its `event_time` config pointed at `event_at`
+(the upstream's column name), but this model's own `select` aliases that column to
+`activity_date` and never exposes an `event_at` column of its own. dbt's microbatch execution
+needs `event_time` to name a column the model's *own* output actually has; this compiled and
+`dbt parse`d fine either way, since batch filtering only runs against a real batch context, but
+failed the instant a real `dbt build` tried to filter this model's own output by a column that
+doesn't exist. Fixed by pointing `event_time` at `activity_date`, the column this model actually
+produces — the `lookback`/`lookahead` cascade math and every other example in this repo is
+unaffected, since `zhao-dbt-plan` only ever read `meta.zhao`, never `event_time`'s value.
+
 ## Run it yourself
 
 ```bash
@@ -86,4 +115,11 @@ dbt seed
 dbt parse   # zhao-dbt-plan reads target/manifest.json
 zhao-dbt-plan --select "mb_events_daily+" --anchor mb_device_activity_7d_smoothed \
   --event-time-start "2026-01-10" --event-time-end "2026-01-11" --pretty
+
+# Drive real dbt build commands from the plan's own JSON output:
+jq -r '.models | sort_by(.layer) | .[] | "\(.name)\t\(.event_time_start)\t\(.event_time_end)"' \
+  target/zhao/dbt_plan.json |
+while IFS=$'\t' read -r name start end; do
+  dbt build --select "$name" --event-time-start "$start" --event-time-end "$end"
+done
 ```

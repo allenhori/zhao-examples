@@ -36,6 +36,10 @@ every pull request that touches this folder:
 3. `zhao check --against origin/<base-branch>` — zhao resolves the merge-base with the base
    branch, compiles *that* commit as the Baseline in a temporary git worktree, and diffs it
    against the PR's current compiled state.
+4. `zhao diff --format json`, parsed with `jq` into the changed-or-impacted model list, feeding a
+   `dbt build --select <that list>` — see below.
+5. For comparison only (not built): what `dbt ls --select state:modified+` would have selected
+   against the same baseline.
 
 `zhao check` exits non-zero (failing the job) only when a change reaches a Rule at `error`
 severity — for example, a column an active downstream reference depends on being removed. It
@@ -69,6 +73,46 @@ Impacted models: dim_customers
 and the job fails. See the pull request against this example titled as a deliberate breaking-change
 demo (left open on purpose) for a live instance of exactly this.
 
+## `zhao check`'s JSON output driving a real `dbt build` — not just a report
+
+`zhao check` gates the PR; a second read of the same underlying diff — via `zhao diff
+--format json`, which always exits zero regardless of severity — is what actually drives what
+gets built next. The workflow's remaining steps parse that JSON with `jq`, build a `dbt build
+--select <...>` command from it, and run it:
+
+```bash
+zhao diff --against "origin/${BASE_REF}" --format json > diff.json
+jq -r '((.changes // [])[].node | split(".") | last), ((.impacted_models // [])[])' diff.json \
+  | sort -u
+```
+
+`.changes[].node` is every model the diff itself touched (the file-level change); `.impacted_models`
+is the separate list of models a `[BREAKING]` finding actually reached downstream. The union of
+the two is exactly what needs re-verifying — nothing more.
+
+### Why this beats `dbt build --select state:modified+`
+
+dbt's own `state:modified+` selector has no idea what changed *inside* a model — it flags a model
+as "modified" the moment its compiled SQL differs at all, then pulls in its **entire** downstream
+cone regardless of whether any of those downstream models actually read the part that changed.
+`zhao`'s list is column-level-lineage-aware: it only includes a downstream model when a real
+finding says that model is actually affected.
+
+Verified locally with a real, additive, non-breaking PR (a new `email_lower` column added to
+`stg_customers`, nothing downstream reading it yet):
+
+| Selector | Models selected |
+|---|---|
+| `dbt ls --select state:modified+` (baseline: this PR's merge-base) | `stg_customers`, `dim_customers`, `fct_orders` (3) |
+| zhao's changed-or-impacted list (`zhao diff --format json`) | `stg_customers` (1) |
+
+Same PR, same underlying dbt project — `state:modified+` rebuilds the whole downstream cone on
+every change because it can't tell that `dim_customers` and `fct_orders` never touch the new
+column; zhao's list stays exactly as large as what actually needs checking. On a bigger project
+with deeper chains this gap only grows. The CI workflow runs both selectors side by side (the
+`state:modified+` one printed for comparison, not built) so the difference is a real number in
+every job log, not a claim in this README.
+
 ## Run it yourself
 
 ```bash
@@ -78,4 +122,9 @@ export DBT_PROFILES_DIR=.
 dbt seed
 dbt compile
 zhao check --against master   # from a branch with a real diff against master
+
+# The JSON-driven build step:
+zhao diff --against master --format json > diff.json
+SELECT=$(jq -r '((.changes // [])[].node | split(".") | last), ((.impacted_models // [])[])' diff.json | sort -u | paste -sd ' ')
+[ -n "$SELECT" ] && dbt build --select $SELECT
 ```
