@@ -1,0 +1,5 @@
+packages:
+  - git: https://github.com/allenhori/zhao_dbt_utils
+    name: zhao_utils
+    revision: 26143d9384e8658a3b8061ef9ad8f12ac81c7bdd
+sha1_hash: 9d863ec1aece9cb462b44808186a313b770011a6
