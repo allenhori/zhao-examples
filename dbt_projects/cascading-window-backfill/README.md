@@ -128,6 +128,11 @@ a date of their choosing from the Actions tab (`Run workflow` → pick a date �
 get a real Action run, with the same JSON plan and `--html` report attached as downloadable
 artifacts, as the result — not a screenshot standing in for one.
 
+**A real example**: [this run](https://github.com/allenhori/zhao-examples/actions/runs/31875630004)
+was manually triggered for `anchor_date: 2026-01-08` — a different date than the one documented
+above, computed and built live, not a re-run of the fixed scenario. Open it, download its
+artifacts, and see for yourself.
+
 ## Run it yourself
 
 ```bash

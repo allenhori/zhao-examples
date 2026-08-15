@@ -31,6 +31,13 @@ demo, not a screenshot standing in for one:
   `zhao diff`'s JSON driving a build of only the actually-impacted models, contrasted against
   `state:modified+`.
 
+**A real, manually-triggered backfill run** —
+[cascading-window-backfill's workflow](.github/workflows/cascading-window-backfill.yml) accepts a
+`workflow_dispatch` trigger for an on-demand backfill against any date, from the Actions tab.
+[This run](https://github.com/allenhori/zhao-examples/actions/runs/31875630004) is a real example
+— `anchor_date: 2026-01-08`, plan computed and `dbt build` actually run live, with the JSON plan
+and `--html` report attached as downloadable artifacts.
+
 Each example folder is self-contained and runnable on its own (`cd` into it, install the tool it
 demonstrates, follow its README). The "Key PRs" column above is the fastest way to see exactly how
 and where a specific capability was added, with real CI runs attached to each one.
