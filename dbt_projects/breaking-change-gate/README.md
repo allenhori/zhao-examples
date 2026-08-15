@@ -73,6 +73,20 @@ Impacted models: dim_customers
 and the job fails. See the pull request against this example titled as a deliberate breaking-change
 demo (left open on purpose) for a live instance of exactly this.
 
+## `zhao check` vs `zhao diff` — same engine, different exit-code contract
+
+`zhao diff` runs the *identical* engine as `zhao check` — same Baseline resolution, same diff,
+same Rule evaluation, same report — with one difference: it always exits `0`, regardless of
+whether a Rule fired at `error` severity. `zhao check` is the CI gate; `zhao diff` is the
+dev-time "just show me what changed" command, safe to run without ever failing your terminal
+session or a script that isn't specifically trying to gate on it.
+
+The workflow runs both, back to back, against the exact same PR (`if: always()` on the `zhao
+diff` step, so it still runs — and its exit code is still visible in the log — even after `zhao
+check` has already failed the job above it). Verified locally against the same breaking change
+(`last_name` removed from `stg_customers`): both commands print the byte-identical report;
+`zhao check` exits `1`, `zhao diff` exits `0`.
+
 ## `zhao check`'s JSON output driving a real `dbt build` — not just a report
 
 `zhao check` gates the PR; a second read of the same underlying diff — via `zhao diff

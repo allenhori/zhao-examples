@@ -45,6 +45,20 @@ jobs:
         env:
           DBT_PROFILES_DIR: .
 
+      # Same engine as the check step above -- identical Baseline resolution,
+      # diff, Rule evaluation, and report -- but `zhao diff` always exits zero,
+      # so it's the dev-time "just show me what changed" command, not a gate.
+      # `if: always()` deliberately runs this even when the check step above
+      # just failed the job, to make the exit-code contrast visible in the
+      # same log: same report either way, only the exit code differs.
+      - name: Run zhao diff (dev-time inspection -- same report, always exits 0)
+        if: always()
+        run: |
+          PATH="$HOME/.zhao/bin:$PATH" zhao diff --against "origin/${{ github.base_ref }}"
+          echo "zhao diff exit code: $?"
+        env:
+          DBT_PROFILES_DIR: .
+
       # zhao check already gated the PR above (it fails the job on a breaking
       # change, so nothing below runs unless the PR is safe to build). This
       # second read of the *same* engine's JSON output -- via `zhao diff`,
