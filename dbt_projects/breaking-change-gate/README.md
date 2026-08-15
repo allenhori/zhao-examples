@@ -134,7 +134,15 @@ every change because it can't tell that `dim_customers` and `fct_orders` never t
 column; zhao's list stays exactly as large as what actually needs checking. On a bigger project
 with deeper chains this gap only grows. The CI workflow runs both selectors side by side (the
 `state:modified+` one printed for comparison, not built) so the difference is a real number in
-every job log, not a claim in this README.
+every job log, not a claim in this README. A final step in the job turns that into an explicit
+savings line instead of leaving it as two lists to eyeball and subtract:
+
+```
+zhao built (actually-impacted):   1 model(s) -> stg_customers
+state:modified+ would have built: 3 model(s) -> breaking_change_gate.marts.dim_customers, breaking_change_gate.marts.fct_orders, breaking_change_gate.staging.stg_customers
+
+==> This run built 2 fewer model(s) than state:modified+ would have (66% less rebuilt) -- less warehouse compute and less time waiting on this PR, for the exact same change.
+```
 
 The actual `dbt build --target staging --select stg_customers` for that same PR lands in the
 `staging` schema, isolated from `dev` — and the workflow's next step queries
