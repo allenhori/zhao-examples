@@ -21,8 +21,9 @@ not output someone hoped it would produce.
 | [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on. |
 | [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain. |
 | [`dbt_projects/downstream-cascaded-run/`](dbt_projects/downstream-cascaded-run/README.md) | `zhao-dbt-plan` (default) | The same microbatch chain, planned forward from the entry model's own explicit run window — no anchor, contrasted directly with the backfill example above. |
+| [`dbt_projects/wref-windowed-ref/`](dbt_projects/wref-windowed-ref/README.md) | `zhao_dbt_utils` (`wref()`) | A rolling-window model shown two ways — plain `ref()` vs `wref()` — with the compiled SQL from both, proving `ref()` silently under-computes the window and `wref()` reads the correct one. |
 
-More examples land here incrementally — see this repo's own pull request history for how each was
+This is now the full set of examples this repo describes. — see this repo's own pull request history for how each was
 added and verified.
 
 Each example folder is self-contained and runnable on its own (`cd` into it, install the tool it

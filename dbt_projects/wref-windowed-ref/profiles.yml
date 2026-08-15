@@ -1,0 +1,7 @@
+wref_windowed_ref:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: 'wref_windowed_ref.duckdb'
+      threads: 4

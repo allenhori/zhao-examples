@@ -1,0 +1,65 @@
+name: wref-windowed-ref
+
+on:
+  pull_request:
+    paths:
+      - "dbt_projects/wref-windowed-ref/**"
+      - ".github/workflows/wref-windowed-ref.yml"
+
+defaults:
+  run:
+    working-directory: dbt_projects/wref-windowed-ref
+
+jobs:
+  compile-and-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt-core and dbt-duckdb
+        run: pip install dbt-core dbt-duckdb
+
+      - name: dbt seed
+        run: dbt seed
+        env:
+          DBT_PROFILES_DIR: .
+
+      # A microbatch model's real per-batch SQL (the widened WHERE clause
+      # wref() produces) is only rendered once dbt actually executes a
+      # batch -- plain `dbt compile` runs with no batch context, so
+      # model.batch isn't populated yet. `dbt build` with an explicit
+      # microbatch window is the real equivalent of "compile this batch"
+      # here; it's still the compiled SQL under target/compiled/ that's
+      # the actual proof artifact, exactly as if `dbt compile` had
+      # produced it for this one batch.
+      - name: dbt build (single-day microbatch, produces compiled SQL)
+        run: dbt build --event-time-start "2026-01-10" --event-time-end "2026-01-11"
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: Show compiled SQL -- plain ref() (narrow, single-day window)
+        run: cat "target/compiled/wref_windowed_ref/models/rolling_7d_revenue_plain_ref/rolling_7d_revenue_plain_ref_2026-01-10.sql"
+
+      - name: Show compiled SQL -- wref() (correctly widened 7-day window)
+        run: cat "target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref/rolling_7d_revenue_wref_2026-01-10.sql"
+
+      - name: Diff the two compiled WHERE clauses
+        run: |
+          diff -u \
+            "target/compiled/wref_windowed_ref/models/rolling_7d_revenue_plain_ref/rolling_7d_revenue_plain_ref_2026-01-10.sql" \
+            "target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref/rolling_7d_revenue_wref_2026-01-10.sql" \
+            || true
+
+      - name: Upload compiled SQL as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wref-vs-ref-compiled-sql
+          path: |
+            dbt_projects/wref-windowed-ref/target/compiled/wref_windowed_ref/models/rolling_7d_revenue_plain_ref/*.sql
+            dbt_projects/wref-windowed-ref/target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref/*.sql
