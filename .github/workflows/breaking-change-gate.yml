@@ -160,7 +160,11 @@ jobs:
       - name: For comparison -- what dbt's own state:modified+ selector would build
         run: |
           echo "dbt ls --select state:modified+ --state <baseline manifest>"
-          dbt ls --resource-type model --select "state:modified+" \
+          # --quiet suppresses dbt's own log lines (Running with dbt=..., Found N
+          # models..., etc.) on stdout -- without it, the WARNING/INFO preamble
+          # gets captured into the file below right alongside the actual selected
+          # node names, silently inflating the count the next step computes from it.
+          dbt --quiet ls --resource-type model --select "state:modified+" \
             --state /tmp/zhao-baseline/dbt_projects/breaking-change-gate/target \
             | tee /tmp/state_modified_plus.txt
         env:
