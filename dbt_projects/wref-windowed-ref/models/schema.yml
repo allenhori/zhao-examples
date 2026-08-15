@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: mb_orders_daily
+    description: >
+      Daily microbatch of raw orders. Upstream for both rolling-window
+      models below.
+    columns:
+      - name: order_id
+      - name: order_date
+      - name: customer_id
+      - name: amount
+
+  - name: rolling_7d_revenue_plain_ref
+    description: >
+      7-day rolling revenue, read with plain ref(). Has the same
+      meta.zhao.lookback: 6 config as rolling_7d_revenue_wref, but plain
+      ref() never reads it -- dbt's own microbatch filtering silently
+      narrows the read of mb_orders_daily to this model's own single-day
+      batch window, so this model actually computes a 1-day sum, not a
+      7-day one.
+    columns:
+      - name: order_date
+      - name: revenue_7d
+
+  - name: rolling_7d_revenue_wref
+    description: >
+      The same 7-day rolling revenue, read with wref() instead of
+      ref(). wref() reads this model's own meta.zhao.lookback: 6 and
+      widens the read of mb_orders_daily to the full 7-day window.
+    columns:
+      - name: order_date
+      - name: revenue_7d

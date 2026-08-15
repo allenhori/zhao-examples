@@ -44,3 +44,7 @@ result.
 **Backfill** — reprocessing a past range of batches (as opposed to the normal forward/incremental
 run), typically because source data changed or a bug is being corrected. Modeled in these examples
 via `zhao-dbt-plan --anchor` with an explicit past window.
+
+**`wref()`** ("windowed ref") — a `zhao_dbt_utils` macro that's a drop-in replacement for dbt's
+`ref()`: when the calling model has a `meta.zhao` block, it automatically widens the read to that
+model's configured `lookback`/`lookahead`; when it doesn't, it behaves exactly like plain `ref()`.
