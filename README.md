@@ -19,6 +19,7 @@ not output someone hoped it would produce.
 | Example | Tool | What it shows |
 |---|---|---|
 | [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on. |
+| [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain. |
 
 More examples land here incrementally — see this repo's own pull request history for how each was
 added and verified.

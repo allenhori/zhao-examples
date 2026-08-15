@@ -1,0 +1,15 @@
+name: 'cascading_window_backfill'
+version: '1.0.0'
+config-version: 2
+
+profile: 'cascading_window_backfill'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  cascading_window_backfill:
+    +materialized: incremental
