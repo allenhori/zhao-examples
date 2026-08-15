@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: mb_events_daily
+    description: >
+      Entry Node. One row per raw event, materialized as a daily dbt
+      microbatch. No meta.zhao -- reads directly from a seed.
+    columns:
+      - name: event_id
+      - name: event_at
+      - name: device_id
+      - name: event_type
+
+  - name: mb_device_activity_3d
+    description: >
+      Tier 2. 3-day trailing event count per device per day, read from
+      mb_events_daily with meta.zhao.lookback: 2.
+    columns:
+      - name: device_id
+      - name: activity_date
+      - name: event_count
+
+  - name: mb_device_activity_7d_smoothed
+    description: >
+      Tier 3. 7-day trailing average of Tier 2's event_count, read from
+      mb_device_activity_3d with meta.zhao.lookback: 6, lookahead: 1.
+    columns:
+      - name: device_id
+      - name: activity_date
+      - name: event_count_7d_avg

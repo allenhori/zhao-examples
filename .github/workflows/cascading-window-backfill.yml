@@ -1,0 +1,54 @@
+name: cascading-window-backfill
+
+on:
+  pull_request:
+    paths:
+      - "dbt_projects/cascading-window-backfill/**"
+      - ".github/workflows/cascading-window-backfill.yml"
+
+defaults:
+  run:
+    working-directory: dbt_projects/cascading-window-backfill
+
+jobs:
+  plan-anchored-backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt-core and dbt-duckdb
+        run: pip install dbt-core dbt-duckdb
+
+      - name: Install zhao-dbt-plan
+        run: cargo install zhao-dbt-plan --locked
+
+      - name: dbt seed
+        run: dbt seed
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: dbt parse (produce target/manifest.json)
+        run: dbt parse
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: Run zhao-dbt-plan (anchored backfill on the deepest model)
+        run: |
+          zhao-dbt-plan \
+            --select "mb_events_daily+" \
+            --anchor mb_device_activity_7d_smoothed \
+            --event-time-start "2026-01-10" \
+            --event-time-end "2026-01-11" \
+            --pretty
+
+      - name: Upload plan JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: cascading-window-backfill-plan
+          path: dbt_projects/cascading-window-backfill/target/zhao/dbt_plan.json
