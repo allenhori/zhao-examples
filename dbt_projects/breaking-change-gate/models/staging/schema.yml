@@ -7,7 +7,6 @@ models:
       - name: customer_id
         description: Primary key.
       - name: first_name
-      - name: last_name
       - name: email
 
   - name: stg_orders

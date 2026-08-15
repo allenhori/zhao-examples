@@ -6,7 +6,6 @@ models:
     columns:
       - name: customer_id
       - name: first_name
-      - name: last_name
       - name: email
       - name: full_name
 
