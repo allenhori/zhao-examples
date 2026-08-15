@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: One row per customer, renamed from the raw seed.
+    columns:
+      - name: customer_id
+        description: Primary key.
+      - name: first_name
+      - name: last_name
+      - name: email
+
+  - name: stg_orders
+    description: One row per order, renamed from the raw seed.
+    columns:
+      - name: order_id
+        description: Primary key.
+      - name: customer_id
+      - name: order_date
+      - name: status
+      - name: amount

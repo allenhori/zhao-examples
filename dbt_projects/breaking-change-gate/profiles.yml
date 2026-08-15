@@ -1,0 +1,7 @@
+breaking_change_gate:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: 'breaking_change_gate.duckdb'
+      threads: 4
