@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: One row per customer, with a computed full_name, for downstream reporting.
+    columns:
+      - name: customer_id
+      - name: first_name
+      - name: last_name
+      - name: email
+      - name: full_name
+
+  - name: fct_orders
+    description: One row per order, joined to dim_customers for a display name.
+    columns:
+      - name: order_id
+      - name: customer_id
+      - name: customer_name
+      - name: order_date
+      - name: status
+      - name: amount

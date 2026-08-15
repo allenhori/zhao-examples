@@ -1,0 +1,18 @@
+name: 'breaking_change_gate'
+version: '1.0.0'
+config-version: 2
+
+profile: 'breaking_change_gate'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  breaking_change_gate:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
