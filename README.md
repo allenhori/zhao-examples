@@ -18,13 +18,14 @@ not output someone hoped it would produce.
 
 | Example | Tool | What it shows |
 |---|---|---|
-| [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on. |
-| [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain. |
+| [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` (`check`, `diff`, `lineage`) | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on; `zhao diff`'s JSON output drives a `dbt build` of only the actually-impacted models (contrasted against dbt's own blunter `state:modified+`); `zhao diff` contrasted against `check`'s exit-code contract; a committed, interactive `zhao lineage --html` report. |
+| [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain — and its JSON plan output literally drives a `dbt build --select <model> --event-time-start/--event-time-end` per tier. A committed, interactive `--html` plan report. |
 | [`dbt_projects/downstream-cascaded-run/`](dbt_projects/downstream-cascaded-run/README.md) | `zhao-dbt-plan` (default) | The same microbatch chain, planned forward from the entry model's own explicit run window — no anchor, contrasted directly with the backfill example above. |
-| [`dbt_projects/wref-windowed-ref/`](dbt_projects/wref-windowed-ref/README.md) | `zhao_dbt_utils` (`wref()`) | A rolling-window model shown two ways — plain `ref()` vs `wref()` — with the compiled SQL from both, proving `ref()` silently under-computes the window and `wref()` reads the correct one. |
+| [`dbt_projects/wref-windowed-ref/`](dbt_projects/wref-windowed-ref/README.md) | `zhao_dbt_utils` (`wref()`, package install, boundary helpers) | A rolling-window model shown three ways — plain `ref()`, standalone `wref()`, package-installed `zhao_utils.wref()`, and hand-written `zhao_window_start()`/`zhao_window_end()` boundary helpers — with the compiled SQL proving `ref()` silently under-computes the window and every `wref()` variant reads the correct one. |
 
-This is now the full set of examples this repo describes. — see this repo's own pull request history for how each was
-added and verified.
+See this repo's own pull request history for how each example was added and verified. A PR
+titled `DEMO: ...` may be open at any time, left unmerged on purpose, as a live instance of one
+example's CI output against a real change.
 
 Each example folder is self-contained and runnable on its own (`cd` into it, install the tool it
 demonstrates, follow its README).
