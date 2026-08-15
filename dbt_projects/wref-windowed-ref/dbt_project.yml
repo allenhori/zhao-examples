@@ -1,0 +1,16 @@
+name: 'wref_windowed_ref'
+version: '1.0.0'
+config-version: 2
+
+profile: 'wref_windowed_ref'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  wref_windowed_ref:
+    +materialized: table

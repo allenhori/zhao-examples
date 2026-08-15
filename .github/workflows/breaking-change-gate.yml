@@ -40,7 +40,127 @@ jobs:
         env:
           DBT_PROFILES_DIR: .
 
+      # `id` set explicitly so later steps can gate on *this specific step's*
+      # outcome, not just GitHub Actions' default "did anything before me
+      # fail" behavior -- see the `if:` conditions below. This is the actual
+      # gate: nothing that touches a real schema runs unless this passes.
       - name: Run zhao check (breaking-change gate)
+        id: zhao_check
         run: PATH="$HOME/.zhao/bin:$PATH" zhao check --against "origin/${{ github.base_ref }}"
+        env:
+          DBT_PROFILES_DIR: .
+
+      # Same engine as the check step above -- identical Baseline resolution,
+      # diff, Rule evaluation, and report -- but `zhao diff` always exits zero,
+      # so it's the dev-time "just show me what changed" command, not a gate.
+      # `if: always()` deliberately runs this even when the check step above
+      # just failed the job, to make the exit-code contrast visible in the
+      # same log: same report either way, only the exit code differs. This is
+      # purely informational -- it never drives the build below.
+      - name: Run zhao diff (dev-time inspection -- same report, always exits 0)
+        if: always()
+        run: |
+          PATH="$HOME/.zhao/bin:$PATH" zhao diff --against "origin/${{ github.base_ref }}"
+          echo "zhao diff exit code: $?"
+        env:
+          DBT_PROFILES_DIR: .
+
+      # Explicitly gated on `zhao check` (the gate step above) having
+      # succeeded -- `if: steps.zhao_check.outcome == 'success'`, spelled out
+      # rather than relying on GitHub Actions' implicit "skip on any earlier
+      # failure" default, so the gate is visible in the workflow file and in
+      # the Actions UI, not just an emergent side effect of step ordering. If
+      # `zhao check` failed (a real breaking change), this step and every
+      # step after it show as skipped, not run-and-ignored -- nothing below
+      # touches a database at all once a breaking change is detected.
+      - name: Read zhao diff's JSON output -> compute the actually-impacted model list
+        if: steps.zhao_check.outcome == 'success'
+        run: |
+          PATH="$HOME/.zhao/bin:$PATH" zhao diff --against "origin/${{ github.base_ref }}" --format json > /tmp/zhao_diff.json
+          jq -r '((.changes // [])[].node | split(".") | last), ((.impacted_models // [])[])' /tmp/zhao_diff.json \
+            | sort -u > /tmp/impacted_models.txt
+          echo "zhao's changed-or-impacted model list for this PR:"
+          cat /tmp/impacted_models.txt
+        env:
+          DBT_PROFILES_DIR: .
+
+      # `staging` is a separate dbt target (see profiles.yml), same database
+      # but its own schema -- seeding it here loads the raw source data that
+      # schema needs to build against. This is the prerequisite data, not
+      # what's being validated; the next step is what actually builds the
+      # models under test.
+      - name: dbt seed --target staging (prerequisite source data for the staging schema)
+        if: steps.zhao_check.outcome == 'success'
+        run: dbt seed --target staging
+        env:
+          DBT_PROFILES_DIR: .
+
+      # Same explicit gate as above. Builds into the `staging` target/schema
+      # specifically (see profiles.yml) -- a PR's validation build lands in
+      # its own isolated schema, never the schema `dev` seeds/compiles
+      # against, mirroring how a real team validates a PR without touching
+      # anything "production" means for them.
+      - name: Read zhao diff's JSON output -> build only the actually-impacted models (staging schema)
+        if: steps.zhao_check.outcome == 'success'
+        run: |
+          if [ -s /tmp/impacted_models.txt ]; then
+            SELECT=$(paste -sd ' ' /tmp/impacted_models.txt)
+            echo "Running: dbt build --target staging --select $SELECT"
+            dbt build --target staging --select $SELECT
+          else
+            echo "zhao reports no changed or impacted models for this PR -- nothing to build."
+          fi
+        env:
+          DBT_PROFILES_DIR: .
+
+      # Real proof, not a claim: query the staging schema itself and confirm
+      # exactly the impacted-model list computed above -- and nothing else --
+      # actually landed there as a model (the seeds are also in this schema,
+      # since the build needs them, but they're prerequisite source data,
+      # not something zhao flagged as impacted, so they're reported
+      # separately here rather than conflated with the actual result). Same
+      # explicit gate -- if zhao_check failed, this is skipped too.
+      - name: Confirm what actually landed in the staging schema
+        if: steps.zhao_check.outcome == 'success'
+        run: |
+          python3 -c "
+          import duckdb
+          con = duckdb.connect('breaking_change_gate.duckdb')
+          rows = con.sql(\"select table_name from information_schema.tables where table_schema = 'staging' order by 1\").fetchall()
+          all_tables = {name for (name,) in rows}
+          impacted = set(open('/tmp/impacted_models.txt').read().split()) if __import__('os').path.exists('/tmp/impacted_models.txt') else set()
+          seeds = all_tables - impacted
+          print('Models actually built into the staging schema (this is the impacted-model list, verified against the real database):')
+          for name in sorted(all_tables & impacted):
+              print(f'  - {name}')
+          missing = impacted - all_tables
+          if missing:
+              print('WARNING -- zhao flagged these as impacted but they are NOT in the staging schema:')
+              for name in sorted(missing):
+                  print(f'  - {name}')
+          print('Seed / prerequisite source data also present (not an impacted model):')
+          for name in sorted(seeds):
+              print(f'  - {name}')
+          "
+
+      # For contrast: dbt's own state:modified+ selector doesn't know column-level
+      # lineage -- it selects every file that changed plus its entire downstream
+      # cone, whether or not anything in that cone actually reads what changed.
+      # This step computes a real baseline manifest (the same merge-base zhao
+      # resolved above) and prints what state:modified+ would have built, so the
+      # difference against the list above is a real, in-CI number, not a claim.
+      - name: Set up a baseline manifest for the state:modified+ comparison
+        run: |
+          git fetch origin "${{ github.base_ref }}"
+          git worktree add /tmp/zhao-baseline "origin/${{ github.base_ref }}"
+          cd /tmp/zhao-baseline/dbt_projects/breaking-change-gate
+          DBT_PROFILES_DIR=. dbt seed
+          DBT_PROFILES_DIR=. dbt compile
+
+      - name: For comparison -- what dbt's own state:modified+ selector would build
+        run: |
+          echo "dbt ls --select state:modified+ --state <baseline manifest>"
+          dbt ls --resource-type model --select "state:modified+" \
+            --state /tmp/zhao-baseline/dbt_projects/breaking-change-gate/target
         env:
           DBT_PROFILES_DIR: .

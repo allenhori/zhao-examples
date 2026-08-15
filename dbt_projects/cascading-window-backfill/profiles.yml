@@ -1,0 +1,7 @@
+cascading_window_backfill:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: 'cascading_window_backfill.duckdb'
+      threads: 4

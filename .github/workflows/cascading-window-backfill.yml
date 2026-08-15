@@ -1,0 +1,108 @@
+name: cascading-window-backfill
+
+on:
+  pull_request:
+    paths:
+      - "dbt_projects/cascading-window-backfill/**"
+      - ".github/workflows/cascading-window-backfill.yml"
+  # Manually triggerable for a real, on-demand backfill against a specific
+  # date range -- distinct from the pull_request trigger above, which only
+  # ever re-verifies the one fixed scenario documented in this project's
+  # README. This is the "someone actually needed to backfill 2026-02-03"
+  # case: pick a date, run it, the resulting Action run is the real demo.
+  workflow_dispatch:
+    inputs:
+      anchor_date:
+        description: "The single day mb_device_activity_7d_smoothed needs reprocessed (YYYY-MM-DD)"
+        required: true
+        default: "2026-01-10"
+
+defaults:
+  run:
+    working-directory: dbt_projects/cascading-window-backfill
+
+jobs:
+  plan-anchored-backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt-core and dbt-duckdb
+        run: pip install dbt-core dbt-duckdb
+
+      - name: Install zhao-dbt-plan
+        run: cargo install zhao-dbt-plan --locked
+
+      - name: dbt seed
+        run: dbt seed
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: dbt parse (produce target/manifest.json)
+        run: dbt parse
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: Run zhao-dbt-plan (anchored backfill on the deepest model)
+        run: |
+          # workflow_dispatch supplies anchor_date; a plain pull_request run
+          # has no inputs, so it falls back to the same fixed date this
+          # project's README and committed report were verified against.
+          ANCHOR_DATE="${{ github.event.inputs.anchor_date || '2026-01-10' }}"
+          ANCHOR_DATE_END=$(date -u -d "$ANCHOR_DATE + 1 day" +%Y-%m-%d)
+          echo "Anchoring the backfill on $ANCHOR_DATE (window end: $ANCHOR_DATE_END)"
+          zhao-dbt-plan \
+            --select "mb_events_daily+" \
+            --anchor mb_device_activity_7d_smoothed \
+            --event-time-start "$ANCHOR_DATE" \
+            --event-time-end "$ANCHOR_DATE_END" \
+            --pretty --html
+
+      - name: Upload plan JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: cascading-window-backfill-plan
+          path: dbt_projects/cascading-window-backfill/target/zhao/dbt_plan.json
+
+      # --html writes to a timestamped filename under target/zhao/dbt-plan/,
+      # so the *content* (not the filename) is what's checked against the
+      # copy committed in this repo -- verified locally that the export is
+      # fully deterministic (byte-identical across separate runs given the
+      # same plan), so a real content drift here means the committed report
+      # actually went stale, not just that the clock moved. Only meaningful
+      # against the default/committed date -- a workflow_dispatch run for a
+      # different anchor_date produces a genuinely different plan, so this
+      # check is skipped rather than made to fail on an expected difference.
+      - name: Check the committed plan report isn't stale
+        if: github.event.inputs.anchor_date == '' || github.event.inputs.anchor_date == '2026-01-10'
+        run: |
+          GENERATED=$(find target/zhao/dbt-plan -name '*.html' | head -n 1)
+          diff dbt_plan_report.html "$GENERATED"
+
+      - name: Upload plan HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cascading-window-backfill-plan-html
+          path: dbt_projects/cascading-window-backfill/target/zhao/dbt-plan/*.html
+
+      # The plan above is more than an artifact to look at: each model's
+      # computed event_time_start/event_time_end literally drives the dbt
+      # build command for that model, tier by tier (upstream first, per the
+      # plan's own layer field) -- zhao-dbt-plan never executes anything
+      # itself, so this step is what actually turns its output into runs.
+      - name: Read zhao-dbt-plan's JSON output -> run dbt build per model
+        run: |
+          jq -r '.models | sort_by(.layer) | .[] | "\(.name)\t\(.event_time_start)\t\(.event_time_end)"' \
+            target/zhao/dbt_plan.json |
+          while IFS=$'\t' read -r name start end; do
+            echo "Running: dbt build --select $name --event-time-start \"$start\" --event-time-end \"$end\""
+            dbt build --select "$name" --event-time-start "$start" --event-time-end "$end"
+          done
+        env:
+          DBT_PROFILES_DIR: .
