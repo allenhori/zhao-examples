@@ -52,3 +52,19 @@ jobs:
         with:
           name: cascading-window-backfill-plan
           path: dbt_projects/cascading-window-backfill/target/zhao/dbt_plan.json
+
+      # The plan above is more than an artifact to look at: each model's
+      # computed event_time_start/event_time_end literally drives the dbt
+      # build command for that model, tier by tier (upstream first, per the
+      # plan's own layer field) -- zhao-dbt-plan never executes anything
+      # itself, so this step is what actually turns its output into runs.
+      - name: Read zhao-dbt-plan's JSON output -> run dbt build per model
+        run: |
+          jq -r '.models | sort_by(.layer) | .[] | "\(.name)\t\(.event_time_start)\t\(.event_time_end)"' \
+            target/zhao/dbt_plan.json |
+          while IFS=$'\t' read -r name start end; do
+            echo "Running: dbt build --select $name --event-time-start \"$start\" --event-time-end \"$end\""
+            dbt build --select "$name" --event-time-start "$start" --event-time-end "$end"
+          done
+        env:
+          DBT_PROFILES_DIR: .

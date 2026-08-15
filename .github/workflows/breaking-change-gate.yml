@@ -44,3 +44,52 @@ jobs:
         run: PATH="$HOME/.zhao/bin:$PATH" zhao check --against "origin/${{ github.base_ref }}"
         env:
           DBT_PROFILES_DIR: .
+
+      # zhao check already gated the PR above (it fails the job on a breaking
+      # change, so nothing below runs unless the PR is safe to build). This
+      # second read of the *same* engine's JSON output -- via `zhao diff`,
+      # which always exits zero -- is what actually drives the next step: it
+      # feeds a real dbt build, not a human reading a report.
+      - name: Read zhao diff's JSON output -> compute the actually-impacted model list
+        run: |
+          PATH="$HOME/.zhao/bin:$PATH" zhao diff --against "origin/${{ github.base_ref }}" --format json > /tmp/zhao_diff.json
+          jq -r '((.changes // [])[].node | split(".") | last), ((.impacted_models // [])[])' /tmp/zhao_diff.json \
+            | sort -u > /tmp/impacted_models.txt
+          echo "zhao's changed-or-impacted model list for this PR:"
+          cat /tmp/impacted_models.txt
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: Read zhao diff's JSON output -> build only the actually-impacted models
+        run: |
+          if [ -s /tmp/impacted_models.txt ]; then
+            SELECT=$(paste -sd ' ' /tmp/impacted_models.txt)
+            echo "Running: dbt build --select $SELECT"
+            dbt build --select $SELECT
+          else
+            echo "zhao reports no changed or impacted models for this PR -- nothing to build."
+          fi
+        env:
+          DBT_PROFILES_DIR: .
+
+      # For contrast: dbt's own state:modified+ selector doesn't know column-level
+      # lineage -- it selects every file that changed plus its entire downstream
+      # cone, whether or not anything in that cone actually reads what changed.
+      # This step computes a real baseline manifest (the same merge-base zhao
+      # resolved above) and prints what state:modified+ would have built, so the
+      # difference against the list above is a real, in-CI number, not a claim.
+      - name: Set up a baseline manifest for the state:modified+ comparison
+        run: |
+          git fetch origin "${{ github.base_ref }}"
+          git worktree add /tmp/zhao-baseline "origin/${{ github.base_ref }}"
+          cd /tmp/zhao-baseline/dbt_projects/breaking-change-gate
+          DBT_PROFILES_DIR=. dbt seed
+          DBT_PROFILES_DIR=. dbt compile
+
+      - name: For comparison -- what dbt's own state:modified+ selector would build
+        run: |
+          echo "dbt ls --select state:modified+ --state <baseline manifest>"
+          dbt ls --resource-type model --select "state:modified+" \
+            --state /tmp/zhao-baseline/dbt_projects/breaking-change-gate/target
+        env:
+          DBT_PROFILES_DIR: .

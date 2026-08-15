@@ -2,7 +2,7 @@
   config(
     materialized='incremental',
     incremental_strategy='microbatch',
-    event_time='event_at',
+    event_time='activity_date',
     batch_size='day',
     begin='2026-01-01',
     meta={'zhao': {'lookback': 2, 'lookahead': 0}}
