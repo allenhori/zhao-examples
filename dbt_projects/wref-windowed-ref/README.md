@@ -66,6 +66,40 @@ The practical effect, run against this project's seed data: the plain-`ref()` mo
 computes `revenue_7d = 75.5` — the correct sum of every order from `2026-01-04` through
 `2026-01-10`. Same config, same intent, silently different (and wrong) answer without `wref()`.
 
+## Two more ways to get the same correct window
+
+The two models above use the **standalone** install (a copied macro file, bare `wref()` calls).
+This project also has two more models proving the other undemonstrated surfaces of
+[`zhao_dbt_utils`](https://github.com/allenhori/zhao_dbt_utils), both verified to produce the
+exact same widened result as `rolling_7d_revenue_wref` above:
+
+**`rolling_7d_revenue_wref_pkg`** — the **package install** path instead of standalone:
+[`packages.yml`](packages.yml) pulls `zhao_dbt_utils` as a real git-based dbt package (`dbt deps`),
+and the call is namespaced — `{{ zhao_utils.wref('mb_orders_daily') }}` — instead of the bare
+`wref()` the standalone file gives you. Pick standalone when you want zero dependency management
+(the whole macro lives in your own project, nothing to `dbt deps`); pick the package install when
+you want `dbt deps`-driven upgrades to a pinned version (`revision: v0.2.0` here) without manually
+re-copying a file.
+
+**`rolling_7d_revenue_boundary_helpers`** — a third approach: instead of `wref()`'s full
+`ref()` replacement, hand-write the `WHERE` clause yourself (`ref(...).render()`, dbt's own
+documented pattern for rolling-window microbatch models) using `zhao_window_start()`/
+`zhao_window_end()` for the two boundary expressions instead of hardcoding the day-count:
+
+```sql
+from {{ ref('mb_orders_daily').render() }}
+where order_date >= {{ zhao_utils.zhao_window_start('mb_orders_daily') }}
+  and order_date <  {{ zhao_utils.zhao_window_end('mb_orders_daily') }}
+```
+
+Use these when you need a custom `WHERE` clause alongside the window (an extra predicate, a join
+condition) that `wref()`'s fixed shape doesn't give you room for — same `meta.zhao.lookback: 6`,
+same correct window, just returning two boundary expressions instead of a full filtered subquery.
+
+Verified locally: both new models' compiled SQL for the `2026-01-10` batch produce the identical
+widened `WHERE order_date >= (... -6 days) and order_date < (...)` clause as
+`rolling_7d_revenue_wref`, and all three models' output rows are byte-identical.
+
 ## Why `dbt build`, not `dbt compile`, in CI
 
 `meta.zhao`-based widening only renders once dbt has a real per-batch context (`model.batch`),
@@ -79,18 +113,22 @@ batch had one been selected.
 
 ## CI
 
-The workflow installs dbt-core + dbt-duckdb, seeds the raw orders, runs the single-day build
-above, prints both models' compiled SQL to the job log, diffs them, and uploads both files as a
-workflow artifact.
+The workflow installs dbt-core + dbt-duckdb, runs `dbt deps` (installs `zhao_dbt_utils` as a real
+package, for the two models that need it), seeds the raw orders, runs the single-day build above,
+prints all four models' compiled SQL to the job log, diffs the plain-`ref()` vs. standalone-`wref()`
+pair, and uploads all four files as a workflow artifact.
 
 ## Run it yourself
 
 ```bash
 cd dbt_projects/wref-windowed-ref
 pip install dbt-core dbt-duckdb
+dbt deps   # installs zhao_dbt_utils, for the two package/boundary-helper models
 export DBT_PROFILES_DIR=.
 dbt seed
 dbt build --event-time-start "2026-01-10" --event-time-end "2026-01-11"
 cat target/compiled/wref_windowed_ref/models/rolling_7d_revenue_plain_ref/*.sql
 cat target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref/*.sql
+cat target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref_pkg/*.sql
+cat target/compiled/wref_windowed_ref/models/rolling_7d_revenue_boundary_helpers/*.sql
 ```

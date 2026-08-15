@@ -117,6 +117,22 @@ filename) against the committed copy and fails the job if they differ — verifi
 export is fully deterministic (byte-identical across separate runs given the same plan), so this
 is a real staleness check, not decorative.
 
+## Triggering a real, on-demand backfill
+
+Every run above happens automatically on a pull request touching this folder — but a real backfill
+is normally something someone decides to run for a specific date, on demand, not something that
+just happens to run because a file changed. The
+[workflow](../../.github/workflows/cascading-window-backfill.yml) also accepts a manual
+`workflow_dispatch` trigger with one input, `anchor_date`, so anyone can actually run this against
+a date of their choosing from the Actions tab (`Run workflow` → pick a date → `Run workflow`) and
+get a real Action run, with the same JSON plan and `--html` report attached as downloadable
+artifacts, as the result — not a screenshot standing in for one.
+
+**A real example**: [this run](https://github.com/allenhori/zhao-examples/actions/runs/31875630004)
+was manually triggered for `anchor_date: 2026-01-08` — a different date than the one documented
+above, computed and built live, not a re-run of the fixed scenario. Open it, download its
+artifacts, and see for yourself.
+
 ## Run it yourself
 
 ```bash

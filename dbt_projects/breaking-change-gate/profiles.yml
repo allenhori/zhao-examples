@@ -5,3 +5,13 @@ breaking_change_gate:
       type: duckdb
       path: 'breaking_change_gate.duckdb'
       threads: 4
+    # Used only for the post-gate impacted-model build (see the CI workflow
+    # and README): same database, but an isolated `staging` schema, so a
+    # PR's validation build never lands in the same schema `dev` seeds/
+    # compiles against. Mirrors the real-world pattern of a PR building into
+    # its own staging schema, not touching whatever "production" means here.
+    staging:
+      type: duckdb
+      path: 'breaking_change_gate.duckdb'
+      schema: staging
+      threads: 4
