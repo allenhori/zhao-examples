@@ -105,6 +105,18 @@ doesn't exist. Fixed by pointing `event_time` at `activity_date`, the column thi
 produces — the `lookback`/`lookahead` cascade math and every other example in this repo is
 unaffected, since `zhao-dbt-plan` only ever read `meta.zhao`, never `event_time`'s value.
 
+## The `--html` report — what it adds over the `--pretty` ASCII tree
+
+`--pretty` (used above) prints a plain-text tree to the job log — useful for a quick read, but it's
+gone the moment the log scrolls past it. `--html` produces a self-contained, interactive report —
+pan/zoom the tier graph, hover a model for its exact computed window and `lookback`/`lookahead` —
+committed in this repo as [`dbt_plan_report.html`](dbt_plan_report.html), a real file you can open
+directly. `zhao-dbt-plan --html` writes it to a timestamped filename under
+`target/zhao/dbt-plan/`, not a fixed path, so the CI workflow diffs its *content* (not the
+filename) against the committed copy and fails the job if they differ — verified locally that the
+export is fully deterministic (byte-identical across separate runs given the same plan), so this
+is a real staleness check, not decorative.
+
 ## Run it yourself
 
 ```bash
@@ -114,7 +126,7 @@ export DBT_PROFILES_DIR=.
 dbt seed
 dbt parse   # zhao-dbt-plan reads target/manifest.json
 zhao-dbt-plan --select "mb_events_daily+" --anchor mb_device_activity_7d_smoothed \
-  --event-time-start "2026-01-10" --event-time-end "2026-01-11" --pretty
+  --event-time-start "2026-01-10" --event-time-end "2026-01-11" --pretty --html
 
 # Drive real dbt build commands from the plan's own JSON output:
 jq -r '.models | sort_by(.layer) | .[] | "\(.name)\t\(.event_time_start)\t\(.event_time_end)"' \

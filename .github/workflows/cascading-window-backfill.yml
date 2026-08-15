@@ -45,13 +45,30 @@ jobs:
             --anchor mb_device_activity_7d_smoothed \
             --event-time-start "2026-01-10" \
             --event-time-end "2026-01-11" \
-            --pretty
+            --pretty --html
 
       - name: Upload plan JSON
         uses: actions/upload-artifact@v4
         with:
           name: cascading-window-backfill-plan
           path: dbt_projects/cascading-window-backfill/target/zhao/dbt_plan.json
+
+      # --html writes to a timestamped filename under target/zhao/dbt-plan/,
+      # so the *content* (not the filename) is what's checked against the
+      # copy committed in this repo -- verified locally that the export is
+      # fully deterministic (byte-identical across separate runs given the
+      # same plan), so a real content drift here means the committed report
+      # actually went stale, not just that the clock moved.
+      - name: Check the committed plan report isn't stale
+        run: |
+          GENERATED=$(find target/zhao/dbt-plan -name '*.html' | head -n 1)
+          diff dbt_plan_report.html "$GENERATED"
+
+      - name: Upload plan HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cascading-window-backfill-plan-html
+          path: dbt_projects/cascading-window-backfill/target/zhao/dbt-plan/*.html
 
       # The plan above is more than an artifact to look at: each model's
       # computed event_time_start/event_time_end literally drives the dbt
