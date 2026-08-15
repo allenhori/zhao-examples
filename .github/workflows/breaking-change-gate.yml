@@ -181,8 +181,13 @@ jobs:
         run: |
           zhao_count=$(wc -l < /tmp/impacted_models.txt | tr -d ' ')
           fanout_count=$(wc -l < /tmp/state_modified_plus.txt | tr -d ' ')
-          echo "zhao built (actually-impacted):   $zhao_count model(s) -> $(paste -sd ', ' /tmp/impacted_models.txt)"
-          echo "state:modified+ would have built: $fanout_count model(s) -> $(paste -sd ', ' /tmp/state_modified_plus.txt)"
+          # NOTE: paste -d takes its argument as a list of single-character
+          # delimiters to cycle through per line, not a literal string --
+          # `-d ', '` alternates ',' then ' ' rather than joining with ", "
+          # every time, which only shows up once a list has 3+ items. Join
+          # with a plain comma and expand it after, instead.
+          echo "zhao built (actually-impacted):   $zhao_count model(s) -> $(paste -sd , /tmp/impacted_models.txt | sed 's/,/, /g')"
+          echo "state:modified+ would have built: $fanout_count model(s) -> $(paste -sd , /tmp/state_modified_plus.txt | sed 's/,/, /g')"
           if [ "$fanout_count" -gt "$zhao_count" ]; then
             saved=$((fanout_count - zhao_count))
             pct=$((saved * 100 / fanout_count))
