@@ -1,0 +1,46 @@
+name: breaking-change-gate
+
+on:
+  pull_request:
+    paths:
+      - "dbt_projects/breaking-change-gate/**"
+      - ".github/workflows/breaking-change-gate.yml"
+
+defaults:
+  run:
+    working-directory: dbt_projects/breaking-change-gate
+
+jobs:
+  zhao-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # zhao's baseline resolution needs full history to find the merge-base
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dbt-core and dbt-duckdb
+        run: pip install dbt-core dbt-duckdb
+
+      - name: Install zhao-cli
+        run: curl -fsSL https://raw.githubusercontent.com/allenhori/zhao-cli/master/scripts/install.sh | sh
+
+      - name: dbt seed
+        run: dbt seed
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: dbt compile (current state)
+        run: dbt compile
+        env:
+          DBT_PROFILES_DIR: .
+
+      - name: Run zhao check (breaking-change gate)
+        run: PATH="$HOME/.zhao/bin:$PATH" zhao check --against "origin/${{ github.base_ref }}"
+        env:
+          DBT_PROFILES_DIR: .
