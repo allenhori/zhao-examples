@@ -36,8 +36,13 @@ every pull request that touches this folder:
 3. `zhao check --against origin/<base-branch>` — zhao resolves the merge-base with the base
    branch, compiles *that* commit as the Baseline in a temporary git worktree, and diffs it
    against the PR's current compiled state.
-4. `zhao diff --format json`, parsed with `jq` into the changed-or-impacted model list, feeding a
-   `dbt build --select <that list>` — see below.
+4. **Only if step 3 passed** — explicitly, via `if: steps.zhao_check.outcome == 'success'` on
+   every step from here on, not GitHub Actions' implicit default: `zhao diff --format json`,
+   parsed with `jq` into the changed-or-impacted model list, feeding
+   `dbt build --target staging --select <that list>` — a real build into an isolated `staging`
+   schema (see profiles.yml), never the schema `dev` seeds/compiles against. A step afterward
+   queries that schema directly and prints exactly what landed there, confirming the impacted
+   list against the real database, not just the command that was supposed to produce it.
 5. For comparison only (not built): what `dbt ls --select state:modified+` would have selected
    against the same baseline.
 
@@ -87,12 +92,16 @@ check` has already failed the job above it). Verified locally against the same b
 (`last_name` removed from `stg_customers`): both commands print the byte-identical report;
 `zhao check` exits `1`, `zhao diff` exits `0`.
 
-## `zhao check`'s JSON output driving a real `dbt build` — not just a report
+## `zhao check`'s JSON output driving a real `dbt build`, only after the gate passes, into an isolated staging schema
 
-`zhao check` gates the PR; a second read of the same underlying diff — via `zhao diff
+`zhao check` gates the PR — nothing below it runs at all if it fails, and that's not an emergent
+side effect of step ordering: every step from here on carries an explicit
+`if: steps.zhao_check.outcome == 'success'` condition, spelled out in the workflow file and
+visible as a skipped (not run-and-ignored) step in the Actions UI when a real breaking change is
+caught. Once past that gate, a second read of the same underlying diff — via `zhao diff
 --format json`, which always exits zero regardless of severity — is what actually drives what
 gets built next. The workflow's remaining steps parse that JSON with `jq`, build a `dbt build
---select <...>` command from it, and run it:
+--target staging --select <...>` command from it, and run it:
 
 ```bash
 zhao diff --against "origin/${BASE_REF}" --format json > diff.json
@@ -126,6 +135,13 @@ column; zhao's list stays exactly as large as what actually needs checking. On a
 with deeper chains this gap only grows. The CI workflow runs both selectors side by side (the
 `state:modified+` one printed for comparison, not built) so the difference is a real number in
 every job log, not a claim in this README.
+
+The actual `dbt build --target staging --select stg_customers` for that same PR lands in the
+`staging` schema, isolated from `dev` — and the workflow's next step queries
+`information_schema.tables` in that schema directly and prints what's actually there, separating
+the one impacted model that was built from the seed data (`raw_customers`, `raw_orders`) present
+only because the model needs it to build against. Real proof against the database, not a claim
+about what the build command should have done.
 
 ## `zhao lineage` — a structural query, not a diff
 
@@ -174,10 +190,12 @@ dbt seed
 dbt compile
 zhao check --against master   # from a branch with a real diff against master
 
-# The JSON-driven build step:
+# The JSON-driven build step -- only meaningful once `zhao check` above has actually
+# passed; nothing here should ever run against a change zhao flagged as breaking:
 zhao diff --against master --format json > diff.json
 SELECT=$(jq -r '((.changes // [])[].node | split(".") | last), ((.impacted_models // [])[])' diff.json | sort -u | paste -sd ' ')
-[ -n "$SELECT" ] && dbt build --select $SELECT
+dbt seed --target staging   # prerequisite source data for the isolated staging schema
+[ -n "$SELECT" ] && dbt build --target staging --select $SELECT
 
 # Lineage (no Baseline/diff involved at all):
 zhao lineage dim_customers --text
