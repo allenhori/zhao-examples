@@ -113,6 +113,43 @@ with deeper chains this gap only grows. The CI workflow runs both selectors side
 `state:modified+` one printed for comparison, not built) so the difference is a real number in
 every job log, not a claim in this README.
 
+## `zhao lineage` — a structural query, not a diff
+
+Everything above is `zhao check`/`zhao diff`: a Baseline comparison, asking "what changed?"
+`zhao lineage` asks a completely different question — "what's upstream/downstream of this model
+*right now*?" — over the current project's compiled state alone. No Baseline, no git, no merge-base
+resolution; it reads `target/manifest.json` and nothing else.
+
+```bash
+zhao lineage dim_customers --text
+```
+
+```
+Upstream:
+  model model.breaking_change_gate.stg_customers
+Downstream:
+  model model.breaking_change_gate.fct_orders
+```
+
+A bare target shows both directions; `+dim_customers` (prefix) shows upstream only,
+`dim_customers+` (suffix) shows downstream only — dbt's own selector syntax, not zhao's own.
+
+HTML is `zhao lineage`'s actual **default** output mode, not an opt-in flag — `--text` is what
+opts out of it, the reverse of how `--html` works on `zhao-dbt-plan`. Running it plain:
+
+```bash
+zhao lineage --html lineage_report_dim_customers.html dim_customers
+```
+
+produces a self-contained, interactive HTML graph — pan, zoom, click a node to see its columns —
+committed in this repo as [`lineage_report_dim_customers.html`](lineage_report_dim_customers.html),
+a real file you can open directly, not a description of one. The
+[`zhao-lineage` workflow](../../.github/workflows/zhao-lineage.yml) regenerates it on every PR
+touching this project and fails the job if the regenerated report differs from the committed
+copy (the export is fully deterministic given the same manifest — verified locally, byte-for-byte
+identical across two separate runs) — so the committed artifact can never silently drift out of
+sync with the project it's describing.
+
 ## Run it yourself
 
 ```bash
@@ -127,4 +164,8 @@ zhao check --against master   # from a branch with a real diff against master
 zhao diff --against master --format json > diff.json
 SELECT=$(jq -r '((.changes // [])[].node | split(".") | last), ((.impacted_models // [])[])' diff.json | sort -u | paste -sd ' ')
 [ -n "$SELECT" ] && dbt build --select $SELECT
+
+# Lineage (no Baseline/diff involved at all):
+zhao lineage dim_customers --text
+zhao lineage --html lineage_report_dim_customers.html dim_customers
 ```
