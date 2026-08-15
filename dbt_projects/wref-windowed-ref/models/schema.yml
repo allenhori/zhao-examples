@@ -31,3 +31,25 @@ models:
     columns:
       - name: order_date
       - name: revenue_7d
+
+  - name: rolling_7d_revenue_wref_pkg
+    description: >
+      The same 7-day rolling revenue again, but wref() comes from the
+      zhao_dbt_utils package (packages.yml + dbt deps) instead of the
+      standalone macro file -- so the call is namespaced,
+      zhao_utils.wref(...), not the bare wref() the standalone install
+      gives you. Same correct result as rolling_7d_revenue_wref.
+    columns:
+      - name: order_date
+      - name: revenue_7d
+
+  - name: rolling_7d_revenue_boundary_helpers
+    description: >
+      The same 7-day rolling revenue a third way: a hand-written WHERE
+      clause (ref(...).render(), the documented dbt pattern) using
+      zhao_window_start()/zhao_window_end() instead of wref() -- for
+      when you want a custom WHERE clause rather than a full ref()
+      replacement. Same correct result as the two models above.
+    columns:
+      - name: order_date
+      - name: revenue_7d

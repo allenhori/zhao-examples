@@ -25,6 +25,15 @@ jobs:
       - name: Install dbt-core and dbt-duckdb
         run: pip install dbt-core dbt-duckdb
 
+      # rolling_7d_revenue_wref_pkg and rolling_7d_revenue_boundary_helpers
+      # call zhao_utils.wref(...)/zhao_utils.zhao_window_start/end(...) --
+      # the namespaced package-install path (packages.yml + dbt deps),
+      # alongside the bare wref() from the standalone macro file already
+      # used by rolling_7d_revenue_wref. Both install paths are exercised
+      # side by side in this one project.
+      - name: dbt deps (installs zhao_dbt_utils as a real package)
+        run: dbt deps
+
       - name: dbt seed
         run: dbt seed
         env:
@@ -49,6 +58,12 @@ jobs:
       - name: Show compiled SQL -- wref() (correctly widened 7-day window)
         run: cat "target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref/rolling_7d_revenue_wref_2026-01-10.sql"
 
+      - name: Show compiled SQL -- zhao_utils.wref() (package-install path)
+        run: cat "target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref_pkg/rolling_7d_revenue_wref_pkg_2026-01-10.sql"
+
+      - name: Show compiled SQL -- zhao_window_start()/zhao_window_end() (boundary helpers)
+        run: cat "target/compiled/wref_windowed_ref/models/rolling_7d_revenue_boundary_helpers/rolling_7d_revenue_boundary_helpers_2026-01-10.sql"
+
       - name: Diff the two compiled WHERE clauses
         run: |
           diff -u \
@@ -63,3 +78,5 @@ jobs:
           path: |
             dbt_projects/wref-windowed-ref/target/compiled/wref_windowed_ref/models/rolling_7d_revenue_plain_ref/*.sql
             dbt_projects/wref-windowed-ref/target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref/*.sql
+            dbt_projects/wref-windowed-ref/target/compiled/wref_windowed_ref/models/rolling_7d_revenue_wref_pkg/*.sql
+            dbt_projects/wref-windowed-ref/target/compiled/wref_windowed_ref/models/rolling_7d_revenue_boundary_helpers/*.sql
