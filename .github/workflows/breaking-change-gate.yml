@@ -160,7 +160,35 @@ jobs:
       - name: For comparison -- what dbt's own state:modified+ selector would build
         run: |
           echo "dbt ls --select state:modified+ --state <baseline manifest>"
-          dbt ls --resource-type model --select "state:modified+" \
-            --state /tmp/zhao-baseline/dbt_projects/breaking-change-gate/target
+          # --quiet suppresses dbt's own log lines (Running with dbt=..., Found N
+          # models..., etc.) on stdout -- without it, the WARNING/INFO preamble
+          # gets captured into the file below right alongside the actual selected
+          # node names, silently inflating the count the next step computes from it.
+          dbt --quiet ls --resource-type model --select "state:modified+" \
+            --state /tmp/zhao-baseline/dbt_projects/breaking-change-gate/target \
+            | tee /tmp/state_modified_plus.txt
         env:
           DBT_PROFILES_DIR: .
+
+      # The two steps above produce two lists; this step is the actual point
+      # of running them side by side -- turning "here are two lists, go count
+      # them" into an explicit, computed savings number in the log itself.
+      # Only meaningful once a real build happened, so it's gated the same
+      # way as the build steps above: if zhao_check failed, nothing was built
+      # at all and there's no "models actually built" number to report.
+      - name: "Savings: models zhao actually rebuilt vs. state:modified+'s fan-out"
+        if: steps.zhao_check.outcome == 'success'
+        run: |
+          zhao_count=$(wc -l < /tmp/impacted_models.txt | tr -d ' ')
+          fanout_count=$(wc -l < /tmp/state_modified_plus.txt | tr -d ' ')
+          echo "zhao built (actually-impacted):   $zhao_count model(s) -> $(paste -sd ', ' /tmp/impacted_models.txt)"
+          echo "state:modified+ would have built: $fanout_count model(s) -> $(paste -sd ', ' /tmp/state_modified_plus.txt)"
+          if [ "$fanout_count" -gt "$zhao_count" ]; then
+            saved=$((fanout_count - zhao_count))
+            pct=$((saved * 100 / fanout_count))
+            echo ""
+            echo "==> This run built $saved fewer model(s) than state:modified+ would have ($pct% less rebuilt) -- less warehouse compute and less time waiting on this PR, for the exact same change."
+          elif [ "$fanout_count" -eq "$zhao_count" ]; then
+            echo ""
+            echo "==> Same set this time -- state:modified+'s fan-out only exceeds zhao's list when a downstream model doesn't actually read what changed. See the cascading-window-backfill/downstream-cascaded-run examples for the same idea applied to microbatch time windows instead of model selection."
+          fi
