@@ -5,6 +5,17 @@ on:
     paths:
       - "dbt_projects/cascading-window-backfill/**"
       - ".github/workflows/cascading-window-backfill.yml"
+  # Manually triggerable for a real, on-demand backfill against a specific
+  # date range -- distinct from the pull_request trigger above, which only
+  # ever re-verifies the one fixed scenario documented in this project's
+  # README. This is the "someone actually needed to backfill 2026-02-03"
+  # case: pick a date, run it, the resulting Action run is the real demo.
+  workflow_dispatch:
+    inputs:
+      anchor_date:
+        description: "The single day mb_device_activity_7d_smoothed needs reprocessed (YYYY-MM-DD)"
+        required: true
+        default: "2026-01-10"
 
 defaults:
   run:
@@ -40,11 +51,17 @@ jobs:
 
       - name: Run zhao-dbt-plan (anchored backfill on the deepest model)
         run: |
+          # workflow_dispatch supplies anchor_date; a plain pull_request run
+          # has no inputs, so it falls back to the same fixed date this
+          # project's README and committed report were verified against.
+          ANCHOR_DATE="${{ github.event.inputs.anchor_date || '2026-01-10' }}"
+          ANCHOR_DATE_END=$(date -u -d "$ANCHOR_DATE + 1 day" +%Y-%m-%d)
+          echo "Anchoring the backfill on $ANCHOR_DATE (window end: $ANCHOR_DATE_END)"
           zhao-dbt-plan \
             --select "mb_events_daily+" \
             --anchor mb_device_activity_7d_smoothed \
-            --event-time-start "2026-01-10" \
-            --event-time-end "2026-01-11" \
+            --event-time-start "$ANCHOR_DATE" \
+            --event-time-end "$ANCHOR_DATE_END" \
             --pretty --html
 
       - name: Upload plan JSON
@@ -58,8 +75,12 @@ jobs:
       # copy committed in this repo -- verified locally that the export is
       # fully deterministic (byte-identical across separate runs given the
       # same plan), so a real content drift here means the committed report
-      # actually went stale, not just that the clock moved.
+      # actually went stale, not just that the clock moved. Only meaningful
+      # against the default/committed date -- a workflow_dispatch run for a
+      # different anchor_date produces a genuinely different plan, so this
+      # check is skipped rather than made to fail on an expected difference.
       - name: Check the committed plan report isn't stale
+        if: github.event.inputs.anchor_date == '' || github.event.inputs.anchor_date == '2026-01-10'
         run: |
           GENERATED=$(find target/zhao/dbt-plan -name '*.html' | head -n 1)
           diff dbt_plan_report.html "$GENERATED"

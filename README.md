@@ -16,19 +16,24 @@ not output someone hoped it would produce.
 
 ## Examples
 
-| Example | Tool | What it shows |
-|---|---|---|
-| [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` (`check`, `diff`, `lineage`) | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on; `zhao diff`'s JSON output drives a `dbt build` of only the actually-impacted models (contrasted against dbt's own blunter `state:modified+`); `zhao diff` contrasted against `check`'s exit-code contract; a committed, interactive `zhao lineage --html` report. |
-| [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain — and its JSON plan output literally drives a `dbt build --select <model> --event-time-start/--event-time-end` per tier. A committed, interactive `--html` plan report. |
-| [`dbt_projects/downstream-cascaded-run/`](dbt_projects/downstream-cascaded-run/README.md) | `zhao-dbt-plan` (default) | The same microbatch chain, planned forward from the entry model's own explicit run window — no anchor, contrasted directly with the backfill example above. |
-| [`dbt_projects/wref-windowed-ref/`](dbt_projects/wref-windowed-ref/README.md) | `zhao_dbt_utils` (`wref()`, package install, boundary helpers) | A rolling-window model shown three ways — plain `ref()`, standalone `wref()`, package-installed `zhao_utils.wref()`, and hand-written `zhao_window_start()`/`zhao_window_end()` boundary helpers — with the compiled SQL proving `ref()` silently under-computes the window and every `wref()` variant reads the correct one. |
+| Example | Tool | What it shows | Key PRs |
+|---|---|---|---|
+| [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` (`check`, `diff`, `lineage`) | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on; `zhao diff`'s JSON output drives a `dbt build` of only the actually-impacted models (contrasted against dbt's own blunter `state:modified+`); `zhao diff` contrasted against `check`'s exit-code contract; a committed, interactive `zhao lineage --html` report. | Base: [#2](https://github.com/allenhori/zhao-examples/pull/2) · JSON→build: [#7](https://github.com/allenhori/zhao-examples/pull/7) · `lineage --html`: [#8](https://github.com/allenhori/zhao-examples/pull/8) · `check` vs `diff`: [#9](https://github.com/allenhori/zhao-examples/pull/9) · **live demo (open):** [#3](https://github.com/allenhori/zhao-examples/pull/3) (an intentional breaking change `zhao check` actually fails on) |
+| [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain — and its JSON plan output literally drives a `dbt build --select <model> --event-time-start/--event-time-end` per tier. A committed, interactive `--html` plan report. | Base: [#4](https://github.com/allenhori/zhao-examples/pull/4) · JSON→build: [#7](https://github.com/allenhori/zhao-examples/pull/7) · `--html` report: [#10](https://github.com/allenhori/zhao-examples/pull/10) |
+| [`dbt_projects/downstream-cascaded-run/`](dbt_projects/downstream-cascaded-run/README.md) | `zhao-dbt-plan` (default) | The same microbatch chain, planned forward from the entry model's own explicit run window — no anchor, contrasted directly with the backfill example above. | Base: [#5](https://github.com/allenhori/zhao-examples/pull/5) |
+| [`dbt_projects/wref-windowed-ref/`](dbt_projects/wref-windowed-ref/README.md) | `zhao_dbt_utils` (`wref()`, package install, boundary helpers) | A rolling-window model shown three ways — plain `ref()`, standalone `wref()`, package-installed `zhao_utils.wref()`, and hand-written `zhao_window_start()`/`zhao_window_end()` boundary helpers — with the compiled SQL proving `ref()` silently under-computes the window and every `wref()` variant reads the correct one. | Base: [#6](https://github.com/allenhori/zhao-examples/pull/6) · Package install + boundary helpers: [#11](https://github.com/allenhori/zhao-examples/pull/11) |
 
-See this repo's own pull request history for how each example was added and verified. A PR
-titled `DEMO: ...` may be open at any time, left unmerged on purpose, as a live instance of one
-example's CI output against a real change.
+**Live demo PRs, open on purpose** — each is a real, unmerged change whose CI output is the actual
+demo, not a screenshot standing in for one:
+- [#3](https://github.com/allenhori/zhao-examples/pull/3) — a genuine breaking change (a column
+  removal an active downstream model depends on) that `zhao check` catches and fails on.
+- [#12](https://github.com/allenhori/zhao-examples/pull/12) — a live, non-breaking change showing
+  `zhao diff`'s JSON driving a build of only the actually-impacted models, contrasted against
+  `state:modified+`.
 
 Each example folder is self-contained and runnable on its own (`cd` into it, install the tool it
-demonstrates, follow its README).
+demonstrates, follow its README). The "Key PRs" column above is the fastest way to see exactly how
+and where a specific capability was added, with real CI runs attached to each one.
 
 ## Contributing
 
