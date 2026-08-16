@@ -52,3 +52,32 @@ jobs:
         with:
           name: downstream-cascaded-run-plan
           path: dbt_projects/cascading-window-backfill/target/zhao/dbt_plan.json
+
+      # Same JSON-consumption pattern as cascading-window-backfill's own build
+      # step (see that workflow), applied here to the forward-cascade plan
+      # instead of the anchored-backfill one: read target/zhao/dbt_plan.json
+      # with jq, walk its models array in layer order (upstream first), and
+      # run each tier's dbt build with that tier's own computed window --
+      # zhao-dbt-plan never executes anything itself, this is what actually
+      # turns the plan into real runs.
+      #
+      # This chain's dates are fixed in the past (2026-01-xx) specifically so
+      # the lookahead case works cleanly: mb_device_activity_7d_smoothed's
+      # lookahead: 1 pushes its computed window a day past the entry model's
+      # own explicit end date (01-11 -> 01-12) -- genuinely "looking ahead"
+      # relative to the entry window, not just re-reading the same days. Real
+      # backfills sometimes need exactly this (a smoothing/lag model whose
+      # correct read of "yesterday" requires part of "today"). Anchoring the
+      # whole scenario safely in the past means that forward-looking window
+      # is still a fixed historical date, not open-ended relative to whenever
+      # this workflow happens to run.
+      - name: Read zhao-dbt-plan's JSON output -> run dbt build per model
+        run: |
+          jq -r '.models | sort_by(.layer) | .[] | "\(.name)\t\(.event_time_start)\t\(.event_time_end)"' \
+            target/zhao/dbt_plan.json |
+          while IFS=$'\t' read -r name start end; do
+            echo "Running: dbt build --select $name --event-time-start \"$start\" --event-time-end \"$end\""
+            dbt build --select "$name" --event-time-start "$start" --event-time-end "$end"
+          done
+        env:
+          DBT_PROFILES_DIR: .
