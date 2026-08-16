@@ -18,8 +18,8 @@ not output someone hoped it would produce.
 
 | Example | Tool | What it shows | Key PRs |
 |---|---|---|---|
-| [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` (`check`, `diff`, `lineage`) | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on; `zhao diff`'s JSON output drives a `dbt build` of only the actually-impacted models (contrasted against dbt's own blunter `state:modified+`); `zhao diff` contrasted against `check`'s exit-code contract; a committed, interactive `zhao lineage --html` report. | Base: [#2](https://github.com/allenhori/zhao-examples/pull/2) · JSON→build: [#7](https://github.com/allenhori/zhao-examples/pull/7) · `lineage --html`: [#8](https://github.com/allenhori/zhao-examples/pull/8) · `check` vs `diff`: [#9](https://github.com/allenhori/zhao-examples/pull/9) · **live demo (open):** [#3](https://github.com/allenhori/zhao-examples/pull/3) (an intentional breaking change `zhao check` actually fails on) |
-| [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain — and its JSON plan output literally drives a `dbt build --select <model> --event-time-start/--event-time-end` per tier. A committed, interactive `--html` plan report. | Base: [#4](https://github.com/allenhori/zhao-examples/pull/4) · JSON→build: [#7](https://github.com/allenhori/zhao-examples/pull/7) · `--html` report: [#10](https://github.com/allenhori/zhao-examples/pull/10) |
+| [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` (`check`, `diff`, `lineage`) | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on; `zhao diff`'s JSON output drives a `dbt build` of only the actually-impacted models (contrasted against dbt's own blunter `state:modified+`); `zhao diff` contrasted against `check`'s exit-code contract; an interactive `zhao lineage --html` report, generated fresh and uploaded as a CI artifact on every PR. | Base: [#2](https://github.com/allenhori/zhao-examples/pull/2) · JSON→build: [#7](https://github.com/allenhori/zhao-examples/pull/7) · `lineage --html`: [#8](https://github.com/allenhori/zhao-examples/pull/8) · `check` vs `diff`: [#9](https://github.com/allenhori/zhao-examples/pull/9) · **live demo (open):** [#3](https://github.com/allenhori/zhao-examples/pull/3) (an intentional breaking change `zhao check` actually fails on) |
+| [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain — and its JSON plan output literally drives a `dbt build --select <model> --event-time-start/--event-time-end` per tier. An interactive `--html` plan report, generated fresh and uploaded as a CI artifact on every run. | Base: [#4](https://github.com/allenhori/zhao-examples/pull/4) · JSON→build: [#7](https://github.com/allenhori/zhao-examples/pull/7) · `--html` report: [#10](https://github.com/allenhori/zhao-examples/pull/10) |
 | [`dbt_projects/downstream-cascaded-run/`](dbt_projects/downstream-cascaded-run/README.md) | `zhao-dbt-plan` (default) | The same microbatch chain, planned forward from the entry model's own explicit run window — no anchor, contrasted directly with the backfill example above. | Base: [#5](https://github.com/allenhori/zhao-examples/pull/5) |
 | [`dbt_projects/wref-windowed-ref/`](dbt_projects/wref-windowed-ref/README.md) | `zhao_dbt_utils` (`wref()`, package install, boundary helpers) | A rolling-window model shown three ways — plain `ref()`, standalone `wref()`, package-installed `zhao_utils.wref()`, and hand-written `zhao_window_start()`/`zhao_window_end()` boundary helpers — with the compiled SQL proving `ref()` silently under-computes the window and every `wref()` variant reads the correct one. | Base: [#6](https://github.com/allenhori/zhao-examples/pull/6) · Package install + boundary helpers: [#11](https://github.com/allenhori/zhao-examples/pull/11) |
 
@@ -68,8 +68,9 @@ capability was added.
   `state:modified+` side-by-side comparison.
 - **[#8](https://github.com/allenhori/zhao-examples/pull/8)** — `zhao lineage`, both `--text` and
   its actual default `--html` mode: a structural upstream/downstream query with no Baseline or
-  git diff involved at all, contrasted against `check`/`diff`'s Baseline comparison. The generated
-  interactive report is committed, and CI fails if it drifts from a fresh regeneration.
+  git diff involved at all, contrasted against `check`/`diff`'s Baseline comparison. Originally
+  committed the generated report and failed CI on drift; revised in #17 (see below) once that
+  turned out not to reflect how anyone actually uses a generated lineage graph.
 - **[#9](https://github.com/allenhori/zhao-examples/pull/9)** — `zhao diff` run right alongside
   `zhao check` (identical engine, always exits `0`) so the exit-code contrast between the CI gate
   and the dev-time inspection command is visible in the same job log, against the same breaking
@@ -77,13 +78,23 @@ capability was added.
 - **[#12](https://github.com/allenhori/zhao-examples/pull/12)** (open — live demo, not meant to be
   merged) — a genuinely additive, non-breaking change (`email_lower` added to `stg_customers`,
   nothing downstream reads it yet). `zhao-check` passes and builds only 1 model; `state:modified+`
-  is shown separately at 3. The `lineage` job is expected to fail here — deliberately, since this
-  branch makes the committed lineage report stale — which is the drift check working as designed,
-  not a bug.
-- **[#14](https://github.com/allenhori/zhao-examples/pull/14)** (open, pending review) — turns the
-  #7/#12 side-by-side lists into a computed savings line instead of two lists to eyeball and
-  subtract: `zhao built N model(s) ... state:modified+ would have built M model(s) ... N fewer
-  models rebuilt (X% less)`.
+  is shown separately at 3. (Before #17, the `lineage` job was expected to fail here on purpose,
+  as a demonstration of a staleness-drift check — see #17 for why that check was removed instead
+  of kept.)
+- **[#14](https://github.com/allenhori/zhao-examples/pull/14)** — turns the #7/#12 side-by-side
+  lists into a computed savings line instead of two lists to eyeball and subtract: `zhao built N
+  model(s) ... state:modified+ would have built M model(s) ... N fewer models rebuilt (X% less)`.
+- **[#16](https://github.com/allenhori/zhao-examples/pull/16)** — fixes a formatting bug in #14's
+  savings line: `paste -sd ', '` doesn't join with the literal string `", "`, it alternates the
+  characters `,` and ` ` per line, which only showed up once a real list had 3+ items (caught in
+  #12's own CI run).
+- **[#17](https://github.com/allenhori/zhao-examples/pull/17)** — removes the commit+diff-gate
+  pattern from `zhao lineage --html` (added in #8): a generated lineage graph has no Baseline and
+  nothing to call "stale" the way `zhao check`/`diff` do, and no real team fails a PR because a
+  graph's rendered bytes changed. The report is still regenerated on every PR and uploaded as a
+  downloadable Actions artifact — the realistic version of "look at the lineage before you
+  approve" — but nothing is committed to the repo and nothing is gated on it. Also removes the
+  same pattern from `zhao-dbt-plan --html` (added in #10) for the identical reason.
 
 ### `cascading-window-backfill` ([`zhao-dbt-plan`](https://github.com/allenhori/zhao-dbt-plan), `--anchor`)
 
@@ -95,8 +106,12 @@ capability was added.
   the breaking-change-gate half of this PR: the plan's JSON output drives a per-tier `dbt build
   --select <model> --event-time-start/--event-time-end`, in the plan's own layer order.
 - **[#10](https://github.com/allenhori/zhao-examples/pull/10)** — `zhao-dbt-plan --html`, its
-  interactive report format (the existing example had only used `--pretty`/JSON). Committed and
-  drift-checked in CI the same way as `zhao lineage --html` in #8.
+  interactive report format (the existing example had only used `--pretty`/JSON). Originally
+  committed and drift-checked in CI the same way as `zhao lineage --html` in #8; revised in #17
+  for the same reason.
+- **[#17](https://github.com/allenhori/zhao-examples/pull/17)** — see the `breaking-change-gate`
+  section above; removes the same commit+diff-gate pattern here too, replaced with "regenerate and
+  upload as a CI artifact on every run."
 
 ### `downstream-cascaded-run` ([`zhao-dbt-plan`](https://github.com/allenhori/zhao-dbt-plan), default mode)
 

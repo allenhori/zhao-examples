@@ -44,17 +44,17 @@ jobs:
         run: PATH="$HOME/.zhao/bin:$PATH" zhao lineage dim_customers --text
 
       # HTML is zhao lineage's actual default output mode (--text opts out
-      # of it, not the other way around). Regenerate the report and fail if
-      # it drifts from the copy committed in this repo, so the committed
-      # artifact can never silently go stale relative to the project it
-      # describes.
-      - name: Run zhao lineage (HTML) and check the committed report isn't stale
-        run: |
-          PATH="$HOME/.zhao/bin:$PATH" zhao lineage --html /tmp/lineage_regen.html dim_customers
-          diff lineage_report_dim_customers.html /tmp/lineage_regen.html
+      # of it, not the other way around). No committed-report/diff-gate
+      # here: lineage is a live structural query, not a Baseline diff --
+      # there's no real "stale" state to catch, and no real team fails a PR
+      # because a generated graph view's bytes changed. Regenerate it fresh
+      # and upload it so a reviewer can open it from the Actions run and see
+      # the blast radius before approving -- that's the realistic use case.
+      - name: Run zhao lineage (HTML, dim_customers)
+        run: PATH="$HOME/.zhao/bin:$PATH" zhao lineage --html target/lineage_report_dim_customers.html dim_customers
 
-      - name: Upload the regenerated report as a workflow artifact
+      - name: Upload the report as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: zhao-lineage-dim-customers-report
-          path: dbt_projects/breaking-change-gate/lineage_report_dim_customers.html
+          path: dbt_projects/breaking-change-gate/target/lineage_report_dim_customers.html
