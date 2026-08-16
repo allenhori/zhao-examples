@@ -109,13 +109,15 @@ unaffected, since `zhao-dbt-plan` only ever read `meta.zhao`, never `event_time`
 
 `--pretty` (used above) prints a plain-text tree to the job log — useful for a quick read, but it's
 gone the moment the log scrolls past it. `--html` produces a self-contained, interactive report —
-pan/zoom the tier graph, hover a model for its exact computed window and `lookback`/`lookahead` —
-committed in this repo as [`dbt_plan_report.html`](dbt_plan_report.html), a real file you can open
-directly. `zhao-dbt-plan --html` writes it to a timestamped filename under
-`target/zhao/dbt-plan/`, not a fixed path, so the CI workflow diffs its *content* (not the
-filename) against the committed copy and fails the job if they differ — verified locally that the
-export is fully deterministic (byte-identical across separate runs given the same plan), so this
-is a real staleness check, not decorative.
+pan/zoom the tier graph, hover a model for its exact computed window and `lookback`/`lookahead`.
+
+This isn't something to commit to git and gate a PR on — a plan has no "stale" state to catch the
+way a Baseline diff does; it's just whatever the current config computes, and a `workflow_dispatch`
+run against a different `anchor_date` is *supposed* to produce a different report, not fail one.
+The realistic use is opening it to see the computed windows visually before actually running the
+backfill, so the [CI workflow](../../.github/workflows/cascading-window-backfill.yml) uploads it
+as a downloadable Actions artifact on every run instead — nothing committed, nothing gated on it
+looking the same as last time.
 
 ## Triggering a real, on-demand backfill
 

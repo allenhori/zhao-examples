@@ -70,21 +70,12 @@ jobs:
           name: cascading-window-backfill-plan
           path: dbt_projects/cascading-window-backfill/target/zhao/dbt_plan.json
 
-      # --html writes to a timestamped filename under target/zhao/dbt-plan/,
-      # so the *content* (not the filename) is what's checked against the
-      # copy committed in this repo -- verified locally that the export is
-      # fully deterministic (byte-identical across separate runs given the
-      # same plan), so a real content drift here means the committed report
-      # actually went stale, not just that the clock moved. Only meaningful
-      # against the default/committed date -- a workflow_dispatch run for a
-      # different anchor_date produces a genuinely different plan, so this
-      # check is skipped rather than made to fail on an expected difference.
-      - name: Check the committed plan report isn't stale
-        if: github.event.inputs.anchor_date == '' || github.event.inputs.anchor_date == '2026-01-10'
-        run: |
-          GENERATED=$(find target/zhao/dbt-plan -name '*.html' | head -n 1)
-          diff dbt_plan_report.html "$GENERATED"
-
+      # No committed-report/diff-gate here: a generated report has no
+      # "stale" state to catch the way a Baseline diff does -- it's just
+      # whatever the current plan says, regenerated fresh every run. The
+      # realistic use of --html is opening it, not gating a merge on its
+      # byte content, so this uploads it for a human to open from the
+      # Actions run instead.
       - name: Upload plan HTML report
         uses: actions/upload-artifact@v4
         with:

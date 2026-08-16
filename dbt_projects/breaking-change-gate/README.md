@@ -179,14 +179,16 @@ opts out of it, the reverse of how `--html` works on `zhao-dbt-plan`. Running it
 zhao lineage --html lineage_report_dim_customers.html dim_customers
 ```
 
-produces a self-contained, interactive HTML graph — pan, zoom, click a node to see its columns —
-committed in this repo as [`lineage_report_dim_customers.html`](lineage_report_dim_customers.html),
-a real file you can open directly, not a description of one. The
-[`zhao-lineage` workflow](../../.github/workflows/zhao-lineage.yml) regenerates it on every PR
-touching this project and fails the job if the regenerated report differs from the committed
-copy (the export is fully deterministic given the same manifest — verified locally, byte-for-byte
-identical across two separate runs) — so the committed artifact can never silently drift out of
-sync with the project it's describing.
+produces a self-contained, interactive HTML graph — pan, zoom, click a node to see its columns.
+
+This isn't something a real team would commit to git and gate a PR on the byte-diff of — unlike
+`zhao check`, `zhao lineage` has no Baseline and nothing to call "stale"; it's just whatever the
+current manifest says, regenerated fresh whenever you ask. The realistic use is a reviewer
+opening it to see a model's blast radius before approving a change, or a developer running it
+locally before touching something with a lot of downstream consumers. So the
+[`zhao-lineage` workflow](../../.github/workflows/zhao-lineage.yml) regenerates the report on
+every PR touching this project and uploads it as a downloadable Actions artifact — nothing is
+committed to the repo, and nothing fails because the graph looks different than it did before.
 
 ## Run it yourself
 
