@@ -20,7 +20,7 @@ not output someone hoped it would produce.
 |---|---|---|---|
 | [`dbt_projects/breaking-change-gate/`](dbt_projects/breaking-change-gate/README.md) | `zhao-cli` (`check`, `diff`, `lineage`) | CI fails a pull request when a compiled-SQL change removes a column an active downstream model depends on; `zhao diff`'s JSON output drives a `dbt build` of only the actually-impacted models (contrasted against dbt's own blunter `state:modified+`); `zhao diff` contrasted against `check`'s exit-code contract; a committed, interactive `zhao lineage --html` report. | Base: [#2](https://github.com/allenhori/zhao-examples/pull/2) · JSON→build: [#7](https://github.com/allenhori/zhao-examples/pull/7) · `lineage --html`: [#8](https://github.com/allenhori/zhao-examples/pull/8) · `check` vs `diff`: [#9](https://github.com/allenhori/zhao-examples/pull/9) · **live demo (open):** [#3](https://github.com/allenhori/zhao-examples/pull/3) (an intentional breaking change `zhao check` actually fails on) |
 | [`dbt_projects/cascading-window-backfill/`](dbt_projects/cascading-window-backfill/README.md) | `zhao-dbt-plan` (`--anchor`) | Given an explicit backfill window on one upstream model, the planner computes the correctly widened window for every downstream tier of a microbatch chain — and its JSON plan output literally drives a `dbt build --select <model> --event-time-start/--event-time-end` per tier. A committed, interactive `--html` plan report. | Base: [#4](https://github.com/allenhori/zhao-examples/pull/4) · JSON→build: [#7](https://github.com/allenhori/zhao-examples/pull/7) · `--html` report: [#10](https://github.com/allenhori/zhao-examples/pull/10) |
-| [`dbt_projects/downstream-cascaded-run/`](dbt_projects/downstream-cascaded-run/README.md) | `zhao-dbt-plan` (default) | The same microbatch chain, planned forward from the entry model's own explicit run window — no anchor, contrasted directly with the backfill example above. | Base: [#5](https://github.com/allenhori/zhao-examples/pull/5) |
+| [`dbt_projects/downstream-cascaded-run/`](dbt_projects/downstream-cascaded-run/README.md) | `zhao-dbt-plan` (default) | The same microbatch chain, planned forward from the entry model's own explicit run window — no anchor, contrasted directly with the backfill example above; its JSON plan output drives a real `dbt build` per tier too, including a genuine lookahead case (a downstream tier's computed window reaching a day past the entry model's own explicit end date). | Base: [#5](https://github.com/allenhori/zhao-examples/pull/5) · JSON→build: [#18](https://github.com/allenhori/zhao-examples/pull/18) |
 | [`dbt_projects/wref-windowed-ref/`](dbt_projects/wref-windowed-ref/README.md) | `zhao_dbt_utils` (`wref()`, package install, boundary helpers) | A rolling-window model shown three ways — plain `ref()`, standalone `wref()`, package-installed `zhao_utils.wref()`, and hand-written `zhao_window_start()`/`zhao_window_end()` boundary helpers — with the compiled SQL proving `ref()` silently under-computes the window and every `wref()` variant reads the correct one. | Base: [#6](https://github.com/allenhori/zhao-examples/pull/6) · Package install + boundary helpers: [#11](https://github.com/allenhori/zhao-examples/pull/11) |
 
 **Live demo PRs, open on purpose** — each is a real, unmerged change whose CI output is the actual
@@ -104,6 +104,13 @@ capability was added.
   `cascading-window-backfill`, run through `zhao-dbt-plan`'s default (no `--anchor`) mode instead:
   an explicit window at the entry model cascades forward, not upstream from an anchor. Exists
   specifically to be read side by side with #4's output on the identical chain.
+- **[#18](https://github.com/allenhori/zhao-examples/pull/18)** — same JSON-consumption pattern as
+  #7, applied to this forward-cascade plan: each tier's computed window drives a real `dbt build`.
+  Specifically exercises the lookahead case — `mb_device_activity_7d_smoothed`'s `lookahead: 1`
+  computes a window reaching a day past the entry model's own explicit end date (`01-11` vs.
+  `01-12`), and CI shows a real `01-11` batch actually getting built for it. Dates fixed safely in
+  the past so a lookahead-widened window stays a fixed historical date rather than depending on
+  whatever "today" is when the workflow runs.
 
 ### `wref-windowed-ref` ([`zhao_dbt_utils`](https://github.com/allenhori/zhao_dbt_utils), `wref()`)
 
